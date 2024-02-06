@@ -1,0 +1,3 @@
+Final Project from my "MATH596: Mathematical Data Science" class. I worked on this project with my classmate KONNOR PAYNE. Our project consisted of finding a dataset where we could demonstrate
+what we had learned from the class. We found the "credit card fraud" dataset on Kaggle.com from the author NIDULA ELGIRIYEWITHANA. We uploaded the dataset, analyzed the multiple parameters, 
+and created linear regression models to predict credit card fraud with varying degrees of accuracy and negativity bias. We give credit for the PCA code to OLUWAFEMI OYEDEJI. 
