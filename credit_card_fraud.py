@@ -26,22 +26,118 @@ pd.set_option('display.max_rows', 100)
 pd.set_option('display.max_columns', 10)
 pd.set_option('display.width', 1000)
 
-def features(df, target):
-    # List to get feature names from columns excluding target
-    feature_names = [
+# Global Variables
+df = None
+feature_names = None
+pca = None
+X_pca = None
+num_components = None
+
+
+def set_dataframe(dat):
+    """
+    Sets the global variable `df` to dat for access in other functions.
+
+    :param dat (pd.DataFrame): DataFrame of data of interest.
+
+    :return: None
+    """
+
+    df = dat
+
+
+def features(target):
+    """
+    Gets a list of feature column names, excluding the target, from a generic DataFrame.
+    Sets the list of features to the gobal variable `feature_names`.
+    Used in this project to obtain a list of features from the credit_card_fraud_2023.csv dataset.
+
+    :param target (str): The column name in the data frame that is the target variable.
+
+    :return: None
+    """
+
+    feature_list = [
         name
         for name in df.columns
             if name not in target
     ]
-    return feature_names
+    feature_names = feature_list
 
-def fraud_hist(df, bin_cnt):
+
+def prelim_pca():
     """
-    Create histograms for 'Amount' seperated by fraud, non-fraud, and total
-    :param df: Credit card transaction dataframe
-    :param bin_cnt: Number of bins in histograms
-    :return: NULL
+    Perform preliminary Principal Component Analysis (PCA) on the standardized features.
+
+    This function scales the input features using StandardScaler, 
+    applies PCA to reduce dimensionality, and determines the number 
+    of principal components based on an eigenvalue threshold of 1.
+
+    This function relies on globally defined variables:
+    - DataFrame `df`
+    - list `feature_names`
+
+    This function sets three globally defined variables:
+            - pca (PCA): The fitted PCA object.
+            - X_pca (pd.DataFrame): A DataFrame of the transformed features 
+              in the principal component space, with columns named 'PC1', 'PC2', etc.
+            - num_components (int): The number of principal components selected 
+              based on the explained variance threshold.
+
+    :param: None
+
+    :return: None
     """
+
+    # Standardize the features
+    scaler = StandardScaler()
+    X_scaled = pd.DataFrame(
+      scaler.fit_transform(df[feature_names]),
+      columns=feature_names
+    )
+
+    # Perform preliminary PCA
+    pca = PCA()
+    X_pca = pd.DataFrame(
+        pca.fit_transform(X_scaled),
+        columns=[f'PC{i + 1}' for i in range(X_scaled.shape[1])]
+    )
+
+    # Choose number of components based on eigenvalues threshold of 1
+    num_components = np.argmax(pca.explained_variance_ < 1)
+    assert num_components > 0, 'Number of components must be > 0'
+
+
+def setup(dat, target):
+    """
+    Defines all global variables by calling 3 functions:
+    - set_dataframe(dat) to define `df`
+    - features(target) to define `feature_names`
+    - prelim_pca() to define `pca`, `X_pca`, and `num_components`
+
+    :param dat (pd.DataFrame): DataFrame of data of interest. 
+    :param target (str): The column name in the data frame that is the target variable. 
+
+    :return: None
+    """
+
+    set_dataframe(dat)
+    features(target)
+    prelim_pca()
+
+
+def fraud_hist(bin_cnt):
+    """
+    Create histograms for 'Amount' separated by fraud, non-fraud, and total transactions.
+    Number of bins of histogram specified by input from user.
+    Plots three histograms side-by-side.
+
+    :param bin_cnt (int): Number of bins to use in the histograms.
+    
+    :return: None 
+    """
+
+
     fraud = df[df['Class'] == 1]
     notFraud = df[df['Class'] == 0]
 
@@ -57,67 +153,60 @@ def fraud_hist(df, bin_cnt):
     plt.tight_layout()
     plt.show()
 
-def prelim_pca(df, feature_names):
-  # Create a StandardScaler instance to fit and transform the data
-  scaler = StandardScaler()
 
-  X_scaled = pd.DataFrame(
-      scaler.fit_transform(df[feature_names]),
-      columns=feature_names
-  )
+def scree_plt():
+    """
+    Create and plot a Scree-plot of Principal Components of data set.
 
-  # Perform preliminary PCA
-  pca = PCA()
-  X_pca = pd.DataFrame(
-      pca.fit_transform(X_scaled),
-      columns=[f'PC{i + 1}' for i in range(X_scaled.shape[1])]
-  )
+    :param: None 
+    
+    :return: None 
+    """ 
 
-  # Choose number of components based on eigenvalues threshold of 1
-  num_components = np.argmax(pca.explained_variance_ < 1)
-  assert num_components > 0, 'Number of components must be > 0'
-  return pca, X_pca, num_components
+    # Visualize scree plot
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4), tight_layout=True)
 
-def scree_plt(df, feature_names):
-  pca, X_pca, num_components = prelim_pca(df, feature_names)
+    # Explained Variance Ratio for Each Principal Component
+    ax1.bar(
+        x=range(1, len(pca.explained_variance_ratio_[:num_components]) + 1),
+        height=pca.explained_variance_ratio_[:num_components],
+        width=0.5,
+    )
 
-  # Visualize scree plot
-  fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4), tight_layout=True)
+    # Set axes properties
+    ax1.set_ylim(0.0, pca.explained_variance_ratio_[0] * 1.1)
+    ax1.set_xlabel('Principal Components')
+    ax1.set_ylabel('Explained Variance Ratio')
+    ax1.set_title('Scree Plot - Explained Variance Ratio')
 
-  # Explained Variance Ratio for Each Principal Component
-  ax1.bar(
-    x=range(1, len(pca.explained_variance_ratio_[:num_components]) + 1),
-    height=pca.explained_variance_ratio_[:num_components],
-    width=0.5,
-  )
+    # Cumulative explained variance ratio plot
+    ax2.plot(
+        range(1, len(pca.explained_variance_ratio_[:num_components]) + 1),
+        np.cumsum(pca.explained_variance_ratio_[:num_components]),
+        'o-'
+    )
+    # Set axes properties
+    ax2.set_ylim(
+        bottom=pca.explained_variance_ratio_[0] * 0.9,
+        top=np.cumsum(pca.explained_variance_ratio_[:num_components])[-1] * 1.1
+    )
+    ax2.set_xlabel('Principal Components')
+    ax2.set_ylabel('Cumulative Explained Variance Ratio')
+    ax2.set_title('Cumulative Explained Variance')
 
-  # Set axes properties
-  ax1.set_ylim(0.0, pca.explained_variance_ratio_[0] * 1.1)
-  ax1.set_xlabel('Principal Components')
-  ax1.set_ylabel('Explained Variance Ratio')
-  ax1.set_title('Scree Plot - Explained Variance Ratio')
+    # Display the plots
+    plt.show()
+    print(pca.explained_variance_ratio_)
 
-  # Cumulative explained variance ratio plot
-  ax2.plot(
-      range(1, len(pca.explained_variance_ratio_[:num_components]) + 1),
-      np.cumsum(pca.explained_variance_ratio_[:num_components]),
-      'o-'
-  )
-  # Set axes properties
-  ax2.set_ylim(
-      bottom=pca.explained_variance_ratio_[0] * 0.9,
-      top=np.cumsum(pca.explained_variance_ratio_[:num_components])[-1] * 1.1
-  )
-  ax2.set_xlabel('Principal Components')
-  ax2.set_ylabel('Cumulative Explained Variance Ratio')
-  ax2.set_title('Cumulative Explained Variance')
 
-  # Display the plots
-  plt.show()
-  print(pca.explained_variance_ratio_)
+def pca_biplot():
+    """
+    Create and plot a Biplot of Principal Component 2's effect of Principal Component 1 (check for error)
 
-def pca_biplot(df, feature_names):
-    pca, X_pca, num_components = prelim_pca(df, feature_names)
+    :param: None 
+    
+    :return: None 
+    """
 
     # Visualize PCA biplot
     fig, ax1 = plt.subplots(1, 1, figsize=(9, 6), tight_layout=True)
@@ -152,10 +241,16 @@ def pca_biplot(df, feature_names):
     # Display the biplot
     plt.show()
 
-def pca_scatter(df, feature_names):
-    # Plot scatter plot of transactions projected to the first two principal components
+
+def pca_scatter():
+    """
+    Plot scatter plot of transactions projected to the first two principal components.
+    Points colored based on whether the transaction was fraudulent or not.
+
+    :param: None 
     
-    pca, X_pca, num_components = prelim_pca(df, feature_names)
+    :return: None 
+    """
 
     # Map class labels to colors
     colors = df['Class'].apply(lambda x: '#FF6F69' if x == 1 else '#608654')
@@ -188,9 +283,11 @@ def pca_scatter(df, feature_names):
     # Display the plot
     plt.show()
 
+
 def fraud_model(V, y, rep=10, breakdown=False, alph=0, threshold=0.5, ridge=False, ):
     '''
     Create a number of models and find the average
+
     :param V: Known parameters
     :param y: Target parameter
     :param rep: Number of repititions
@@ -198,7 +295,8 @@ def fraud_model(V, y, rep=10, breakdown=False, alph=0, threshold=0.5, ridge=Fals
     :param alph: lambda value
     :param threshold: where to round initial output up to 1
     :param ridge: boolean condition to use ridge or LASSO regression
-    :return: NULL
+
+    :return: None
     '''
     model_type = ["linear", "ridge", "LASSO"]
 
@@ -253,12 +351,13 @@ def fraud_model(V, y, rep=10, breakdown=False, alph=0, threshold=0.5, ridge=Fals
         print()
 
 
-#
 def max_lambda(V, y):
     """
     Finding largest lamda for sparse LASSO regression model while maintaining above a 90% accuracy
+
     :param V: features for model training and testing input
     :param y: target for model training and testing output
+
     :return: NULL
     """
     alph = 0.1
@@ -282,3 +381,4 @@ def max_lambda(V, y):
 
     print("Accuracy:", round(acc, 3) * 100, '%')
     print("Lamda:", alph)
+
