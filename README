@@ -1,3 +1,11 @@
-Final Project from my "MATH596: Mathematical Data Science" class. I worked on this project with my classmate KONNOR PAYNE. Our project consisted of finding a dataset where we could demonstrate
-what we had learned from the class. We found the "credit card fraud" dataset on Kaggle.com from the author NIDULA ELGIRIYEWITHANA. We uploaded the dataset, analyzed the multiple parameters, 
-and created linear regression models to predict credit card fraud with varying degrees of accuracy and negativity bias. We give credit for the PCA code to OLUWAFEMI OYEDEJI. 
+Final Project from my "MATH596: Mathematical Data Science" class.
+I worked on this project with my classmate KONNOR PAYNE.
+Our project consisted of finding a dataset where we could demonstrate what we had learned from the class.
+We found the "credit card fraud" dataset on Kaggle.com from the author NIDULA ELGIRIYEWITHANA.
+We uploaded the dataset, analyzed the multiple parameters, 
+and created linear regression models to predict credit card fraud with varying degrees of accuracy and negativity bias.
+We give credit for the PCA code to OLUWAFEMI OYEDEJI. 
+
+This project was revised on 9/25/24 to fix critical errors with how the notebook and Python file interacted with each other.
+This was ultimately solved through global variable declaration inside credit_card_fraud.py
+along with a `setup()` function to call inside the notebook
