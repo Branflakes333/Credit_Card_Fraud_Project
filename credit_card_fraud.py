@@ -16,9 +16,7 @@ from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 
 # Modeling
-from sklearn.linear_model import LinearRegression
-from sklearn.linear_model import Ridge
-from sklearn.linear_model import Lasso
+from sklearn.linear_model import SGDClassifier
 from sklearn.model_selection import train_test_split
 
 # Options
@@ -28,41 +26,46 @@ pd.set_option('display.width', 1000)
 
 # Global Variables
 df = None
-feature_names = None
+target = None
+features = None
 pca = None
 X_pca = None
 num_components = None
+V_train = None
+V_test = None 
+y_train = None 
+y_test = None
 
 
 def set_dataframe(dat):
     """
-    Sets the global variable `df` to dat for access in other functions.
+    Sets the global variable `df` to `dat` for access in other functions.
 
     :param dat (pd.DataFrame): DataFrame of data of interest.
 
     :return: None
     """
-
+    global df
     df = dat
 
 
-def features(target):
+def set_target_and_features(tar):
     """
-    Gets a list of feature column names, excluding the target, from a generic DataFrame.
-    Sets the list of features to the gobal variable `feature_names`.
-    Used in this project to obtain a list of features from the credit_card_fraud_2023.csv dataset.
+    Sets the global variable `target` to `tar` for access in other functions.
 
-    :param target (str): The column name in the data frame that is the target variable.
+    :param tar (pd.Column): Column of target variable
 
     :return: None
     """
+    global target
+    target = tar
 
-    feature_list = [
-        name
-        for name in df.columns
-            if name not in target
-    ]
-    feature_names = feature_list
+    global features
+    features = df.columns.drop([target]).tolist()
+
+
+def get_features():
+    return features
 
 
 def prelim_pca():
@@ -75,7 +78,7 @@ def prelim_pca():
 
     This function relies on globally defined variables:
     - DataFrame `df`
-    - list `feature_names`
+    - list `features`
 
     This function sets three globally defined variables:
             - pca (PCA): The fitted PCA object.
@@ -92,18 +95,21 @@ def prelim_pca():
     # Standardize the features
     scaler = StandardScaler()
     X_scaled = pd.DataFrame(
-      scaler.fit_transform(df[feature_names]),
-      columns=feature_names
+      scaler.fit_transform(df[features]),
+      columns=features
     )
 
     # Perform preliminary PCA
+    global pca
     pca = PCA()
+    global X_pca
     X_pca = pd.DataFrame(
         pca.fit_transform(X_scaled),
         columns=[f'PC{i + 1}' for i in range(X_scaled.shape[1])]
     )
 
     # Choose number of components based on eigenvalues threshold of 1
+    global num_components
     num_components = np.argmax(pca.explained_variance_ < 1)
     assert num_components > 0, 'Number of components must be > 0'
 
@@ -112,7 +118,7 @@ def setup(dat, target):
     """
     Defines all global variables by calling 3 functions:
     - set_dataframe(dat) to define `df`
-    - features(target) to define `feature_names`
+    - features(target) to define `features`
     - prelim_pca() to define `pca`, `X_pca`, and `num_components`
 
     :param dat (pd.DataFrame): DataFrame of data of interest. 
@@ -122,7 +128,7 @@ def setup(dat, target):
     """
 
     set_dataframe(dat)
-    features(target)
+    set_target_and_features(target)
     prelim_pca()
 
 
@@ -212,7 +218,7 @@ def pca_biplot():
     fig, ax1 = plt.subplots(1, 1, figsize=(9, 6), tight_layout=True)
 
     # Iterate over features to plot arrows and labels on the biplot
-    for i, feature in enumerate(feature_names):
+    for i, feature in enumerate(features):
         # Plot arrows representing feature contributions to PC1 and PC2
         ax1.arrow(
             x=0,
@@ -284,101 +290,43 @@ def pca_scatter():
     plt.show()
 
 
-def fraud_model(V, y, rep=10, breakdown=False, alph=0, threshold=0.5, ridge=False, ):
+def fraud_model(V, y):
+    '''
+    Create a number of models and find the average
+
+    :V dataframe: Dataframe of all feature data
+    :y dataframe: Dataframe of all target data
+
+    :return: None
+    '''
+    # Create Logistic Regression Model
+    logistic = SGDClassifier(
+    loss = 'log_loss', 
+    max_iter = 10000,
+    learning_rate = 'optimal',
+    random_state = 333 # Set seed
+    )
+
+    # Create training testing split for features and target data
+    global V_train, V_test, y_train, y_test
+    V_train, V_test, y_train, y_test = train_test_split(V, y, test_size=0.2)
+
+    # Train the logistic model on training data
+    logistic.fit(V_train, y_train)
+    return logistic
+
+def model_accuracy(model):
     '''
     Create a number of models and find the average
 
     :param V: Known parameters
-    :param y: Target parameter
-    :param rep: Number of repititions
-    :param breakdown: Boolean condition to print true/false positive/negative
-    :param alph: lambda value
-    :param threshold: where to round initial output up to 1
-    :param ridge: boolean condition to use ridge or LASSO regression
 
     :return: None
     '''
-    model_type = ["linear", "ridge", "LASSO"]
-
-    acc = []
-    tpr = []
-    tnr = []
-    fpr = []
-    fnr = []
-
-    for i in range(rep):
-        V_train, V_test, y_train, y_test = train_test_split(V, y, test_size=0.2)
-
-        if alph == 0:
-            res = LinearRegression().fit(V_train, y_train)
-            moddex = 0
-        elif ridge:
-            res = Ridge(alph).fit(V_train, y_train)
-            moddex = 1
-        else:
-            res = Lasso(alph).fit(V_train, y_train)
-            moddex = 2
-
-        predictions = res.predict(V_test)
-        predictions = (predictions >= threshold).astype(int)
-        cnt = np.sum(predictions == y_test)
-        acc.append(cnt / len(predictions))
-
-        # Breakdown of True/False Positive/Negative Rate
-        zeros = np.zeros(len(predictions))
-        ones = zeros + 1
-
-        p = np.sum(predictions == ones)
-        n = np.sum(predictions == zeros)
-        tp = np.sum((predictions == ones) & (predictions == y_test))
-        tn = np.sum((predictions == zeros) & (predictions == y_test))
-        fp = p - tp
-        fn = n - tn
-        tpr.append(tp / (tp + fn))
-        tnr.append(tn / (tn + fp))
-        fpr.append(fp / (fp + tn))
-        fnr.append(fn / (fn + tp))
-
-    if breakdown:
-        print("Mean", model_type[moddex], "Regression Model accuracy:", (round(np.mean(acc) * 100, 1)), '%')
-        print("True positive rate:", round(np.mean(tpr) * 100, 1), '%')
-        print("True negative rate:", round(np.mean(tnr) * 100, 1), '%')
-        print("False positive rate:", round(np.mean(fpr) * 100, 1), '%')
-        print("False negative rate:", round(np.mean(fnr) * 100, 1), '%')
-        print()
-    else:
-        print("Mean", model_type[moddex], "regression model accuracy:", (round(np.mean(acc) * 100, 1)), '%')
-        print()
+    print(
+        "Training Data Accuracy: ", round(model.score(V_train, y_train) * 10000) / 100, "%", 
+        "\nTesting Data Accuracy: ", round(model.score(V_test, y_test) * 10000) / 100, "%"
+    )
 
 
-def max_lambda(V, y):
-    """
-    Finding largest lamda for sparse LASSO regression model while maintaining above a 90% accuracy
-
-    :param V: features for model training and testing input
-    :param y: target for model training and testing output
-
-    :return: NULL
-    """
-    alph = 0.1
-    acc = 1
-    while acc >= 0.90:
-        V_train, V_test, y_train, y_test = train_test_split(V, y, test_size=0.2)
-        alph += 0.1
-        res = Lasso(alpha=alph).fit(V_train, y_train)
-
-        predictions = res.predict(V_test)
-        predictions = (predictions >= 0.5).astype(int)
-
-        cnt = np.sum(predictions == y_test)
-
-        acc2 = cnt / (len(y_test))
-        if acc2 < 0.90:
-            alph -= 0.1
-            break
-        else:
-            acc = acc2
-
-    print("Accuracy:", round(acc, 3) * 100, '%')
-    print("Lamda:", alph)
 
