@@ -147,13 +147,13 @@ def fraud_hist(bin_cnt):
     fraud = df[df['Class'] == 1]
     notFraud = df[df['Class'] == 0]
 
-    fig, axes = plt.subplots(1, 3)
+    fig, axes = plt.subplots(3, 1)
     ax = axes.ravel()
-    ax[0].hist(df['Amount'], bins=bin_cnt)
+    ax[0].hist(df['Amount'], bins=bin_cnt, density = True)
     ax[0].set_title("All transactions")
-    ax[1].hist(fraud['Amount'], bins=bin_cnt)
+    ax[1].hist(fraud['Amount'], bins=bin_cnt, density = True)
     ax[1].set_title("Fraud transactions")
-    ax[2].hist(notFraud['Amount'], bins=bin_cnt)
+    ax[2].hist(notFraud['Amount'], bins=bin_cnt, density = True)
     ax[2].set_title("Non-Fraud transactions")
 
     plt.tight_layout()
@@ -202,7 +202,6 @@ def scree_plt():
 
     # Display the plots
     plt.show()
-    print(pca.explained_variance_ratio_)
 
 
 def pca_biplot():
@@ -301,32 +300,117 @@ def fraud_model(V, y):
     '''
     # Create Logistic Regression Model
     logistic = SGDClassifier(
-    loss = 'log_loss', 
-    max_iter = 10000,
-    learning_rate = 'optimal',
-    random_state = 333 # Set seed
+        loss = 'log_loss', 
+        max_iter = 10000,
+        learning_rate = 'optimal'
     )
 
     # Create training testing split for features and target data
     global V_train, V_test, y_train, y_test
-    V_train, V_test, y_train, y_test = train_test_split(V, y, test_size=0.2)
+    V_train, V_test, y_train, y_test = train_test_split(V, y, test_size=0.2, random_state = 333)
 
     # Train the logistic model on training data
     logistic.fit(V_train, y_train)
     return logistic
 
-def model_accuracy(model):
-    '''
-    Create a number of models and find the average
 
-    :param V: Known parameters
+def calculate_metrics(model, V, y, cutoff):
+    '''
+    Calculate accuracy, False Positive Rate, and False Negative Rate
+    :model: logistic regression model
+    :V: features data frame
+    :y: target data frame
+    :cutoff: Prediction probability rounding number 
+
+    :return accuracy, FPR, FNR: accuracy, false positive rate, and false negative rate of model given data set
+    '''
+    proba = model.predict_proba(V)[:, 1]  # Probabilities for the positive class (1)
+    predictions = (proba >= cutoff).astype(int).astype(bool)
+        
+    # Accuracy
+    accuracy = np.mean(predictions == y)
+        
+    # Confusion matrix components
+    TP = np.sum((predictions == 1) & (y == 1))  # True Positives
+    TN = np.sum((predictions == 0) & (y == 0))  # True Negatives
+    FP = np.sum((predictions == 1) & (y == 0))  # False Positives
+    FN = np.sum((predictions == 0) & (y == 1))  # False Negatives
+        
+    # False Positive Rate (FPR) and False Negative Rate (FNR)
+    FPR = FP / (FP + TN) if (FP + TN) > 0 else 0
+    FNR = FN / (FN + TP) if (FN + TP) > 0 else 0
+        
+    return accuracy, FPR, FNR
+    
+
+def model_accuracy(model, cutoff=0.5):
+    '''
+    Table of model accuracy, false negative rate, and false positive rate for training and testing split
+    :model: logistic regression model
+    :cutoff: Prediction probability rounding number
+
+    :return metrics_df: data frame of metrics for model
+    '''
+    # Calculate metrics for training and testing datasets
+    train_accuracy, train_FPR, train_FNR = calculate_metrics(model, V_train, y_train, cutoff)
+    test_accuracy, test_FPR, test_FNR = calculate_metrics(model, V_test, y_test, cutoff)
+    
+    # Create a DataFrame to display the results
+    metrics_df = pd.DataFrame({
+        'Metric': ['Accuracy', 'False Positive Rate (FPR)', 'False Negative Rate (FNR)'],
+        'Training Data': [f'{train_accuracy * 100:.2f}%', f'{train_FPR * 100:.2f}%', f'{train_FNR * 100:.2f}%'],
+        'Testing Data': [f'{test_accuracy * 100:.2f}%', f'{test_FPR * 100:.2f}%', f'{test_FNR * 100:.2f}%']
+    })
+    
+    return metrics_df
+
+
+def accuracy_FNR_plt(model):
+    '''
+    Plots the train and test accuracies, and False Negative Rates (FNRs)
+    for different cutoff values, with train and test data on the same graphs.
+    
+    :param model: Trained model
 
     :return: None
     '''
-    print(
-        "Training Data Accuracy: ", round(model.score(V_train, y_train) * 10000) / 100, "%", 
-        "\nTesting Data Accuracy: ", round(model.score(V_test, y_test) * 10000) / 100, "%"
-    )
+    # Setup lists
+    train_accuracies_list = []
+    train_FNRs_list = []
+    test_accuracies_list = []
+    test_FNRs_list = []
+    cutoffs = np.arange(0.001, 0.50, 0.005)
 
+    # Calculate metrics for each cutoff and store in lists
+    for co in cutoffs:
+        train_accuracy, train_FPR, train_FNR = calculate_metrics(model, V_train, y_train, co)
+        test_accuracy, test_FPR, test_FNR = calculate_metrics(model, V_test, y_test, co)
 
+        train_accuracies_list.append(train_accuracy)
+        train_FNRs_list.append(train_FNR)
+        test_accuracies_list.append(test_accuracy)
+        test_FNRs_list.append(test_FNR)
 
+    # Create a 1x2 grid for subplots
+    fig, axs = plt.subplots(1, 2, figsize=(14, 6))
+
+    # Plot accuracy on the first subplot
+    axs[0].plot(cutoffs, train_accuracies_list, color='blue', label='Train Accuracy')
+    axs[0].plot(cutoffs, test_accuracies_list, color='green', label='Test Accuracy')
+    axs[0].axhline(y=0.90, color='gray', linestyle='--', linewidth=1)  # Add horizontal dashed line at y=0.90
+    axs[0].axvline(x=0.072, color='gray', linestyle='--', linewidth=1)  # Add vertical dashed line at x=0.072
+    axs[0].set_title('Train and Test Accuracy vs Cutoff')
+    axs[0].set_xlabel('Cutoff')
+    axs[0].set_ylabel('Accuracy')
+    axs[0].legend()
+
+    # Plot FNR on the second subplot
+    axs[1].plot(cutoffs, train_FNRs_list, color='red', label='Train FNR')
+    axs[1].plot(cutoffs, test_FNRs_list, color='purple', label='Test FNR')
+    axs[1].set_title('Train and Test FNR vs Cutoff')
+    axs[1].set_xlabel('Cutoff')
+    axs[1].set_ylabel('FNR')
+    axs[1].legend()
+
+    plt.tight_layout()  # Adjusts subplot layout for better spacing
+    plt.show()
