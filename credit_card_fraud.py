@@ -7,6 +7,7 @@ The following code is not completely our own:
 # Data Manip
 import pandas as pd
 import numpy as np
+import seaborn as sns
 
 # Visuals
 import matplotlib.pyplot as plt
@@ -16,8 +17,9 @@ from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 
 # Modeling
-from sklearn.linear_model import SGDClassifier
 from sklearn.model_selection import train_test_split
+from sklearn.linear_model import SGDClassifier
+from sklearn.metrics import confusion_matrix, accuracy_score
 
 # Options
 pd.set_option('display.max_rows', 100)
@@ -289,129 +291,182 @@ def pca_scatter():
     plt.show()
 
 
+def covariance_plt():
+    """
+    Calculate and plot covarianve matrix.
+    Points colored based on Severity of variance/covariance
+
+    :param: None 
+    
+    :return: None 
+    """
+
+    # Calculate covariance matrix
+    cov_matrix = df.cov()
+    
+    # Set up the matplotlib figure with a larger size for more variables
+    plt.figure(figsize=(15, 12))
+    
+    # Use seaborn's heatmap to plot
+    sns.heatmap(cov_matrix, annot=True, fmt=".2f", cmap='coolwarm', square=True, 
+                cbar_kws={"shrink": .7}, xticklabels=cov_matrix.columns, yticklabels=cov_matrix.columns)
+    
+    # Rotate the x and y labels to prevent overlap
+    plt.xticks(rotation=45, ha='right', fontsize=10)
+    plt.yticks(rotation=0, fontsize=10)
+    
+    # Add title
+    plt.title('Covariance Matrix')
+    
+    # Show plot
+    plt.tight_layout()  # Adjust layout to make room for labels
+    plt.show()
+
+
 def fraud_model(V, y):
     '''
-    Create a number of models and find the average
+    Create a logistic regression model using SGDClassifier with log loss.
 
-    :V dataframe: Dataframe of all feature data
-    :y dataframe: Dataframe of all target data
+    :V: DataFrame of all feature data
+    :y: DataFrame of all target data
 
-    :return: None
+    :return: Trained logistic regression model
     '''
-    # Create Logistic Regression Model
     logistic = SGDClassifier(
-        loss = 'log_loss', 
-        max_iter = 10000,
-        learning_rate = 'optimal',
-        random_state = 333
+        loss='log_loss',
+        max_iter=10000,
+        learning_rate='optimal',
+        random_state=333
     )
 
-    # Create training testing split for features and target data
+    # Training/testing split
     global V_train, V_test, y_train, y_test
-    V_train, V_test, y_train, y_test = train_test_split(V, y, test_size=0.2, random_state = 333)
+    V_train, V_test, y_train, y_test = train_test_split(V, y, test_size=0.2, random_state=333)
 
-    # Train the logistic model on training data
     logistic.fit(V_train, y_train)
     return logistic
 
 
 def calculate_metrics(model, V, y, cutoff):
     '''
-    Calculate accuracy, False Positive Rate, and False Negative Rate
-    :model: logistic regression model
-    :V: features data frame
-    :y: target data frame
-    :cutoff: Prediction probability rounding number 
+    Calculate accuracy, FPR, and FNR using predictions based on a cutoff.
 
-    :return accuracy, FPR, FNR: accuracy, false positive rate, and false negative rate of model given data set
+    :model: Logistic regression model
+    :V: Features data
+    :y: Target data
+    :cutoff: Cutoff threshold for classifying positive predictions
+
+    :return: Accuracy, FPR, and FNR
     '''
-    proba = model.predict_proba(V)[:, 1]  # Probabilities for the positive class (1)
+    proba = model.predict_proba(V)[:, 1]  # Probability for the positive class
     predictions = (proba >= cutoff)
-        
-    # Accuracy
-    accuracy = np.mean(predictions == y)
-        
-    # Confusion matrix components
-    TP = np.sum((predictions == 1) & (y == 1))  # True Positives
-    TN = np.sum((predictions == 0) & (y == 0))  # True Negatives
-    FP = np.sum((predictions == 1) & (y == 0))  # False Positives
-    FN = np.sum((predictions == 0) & (y == 1))  # False Negatives
-        
-    # False Positive Rate (FPR) and False Negative Rate (FNR)
-    FPR = FP / (FP + TN) if (FP + TN) > 0 else 0
-    FNR = FN / (FN + TP) if (FN + TP) > 0 else 0
-        
-    return accuracy, FPR, FNR
     
+    accuracy = accuracy_score(y, predictions)
+    tn, fp, fn, tp = confusion_matrix(y, predictions).ravel()
+
+    FPR = fp / (fp + tn) if (fp + tn) > 0 else 0
+    FNR = fn / (fn + tp) if (fn + tp) > 0 else 0
+
+    return accuracy, FPR, FNR
+
 
 def model_accuracy(model, cutoff=0.5):
     '''
-    Table of model accuracy, false negative rate, and false positive rate for training and testing split
-    :model: logistic regression model
-    :cutoff: Prediction probability rounding number
+    Display model accuracy, FPR, and FNR for train and test data.
 
-    :return metrics_df: data frame of metrics for model
+    :model: Trained logistic regression model
+    :cutoff: Cutoff threshold for positive predictions
+
+    :return: DataFrame with metrics for training and testing sets
     '''
-    # Calculate metrics for training and testing datasets
-    train_accuracy, train_FPR, train_FNR = calculate_metrics(model, V_train, y_train, cutoff)
-    test_accuracy, test_FPR, test_FNR = calculate_metrics(model, V_test, y_test, cutoff)
-    
-    # Create a DataFrame to display the results
+    train_metrics = calculate_metrics(model, V_train, y_train, cutoff)
+    test_metrics = calculate_metrics(model, V_test, y_test, cutoff)
+
     metrics_df = pd.DataFrame({
         'Metric': ['Accuracy', 'False Positive Rate (FPR)', 'False Negative Rate (FNR)'],
-        'Training Data': [f'{train_accuracy * 100:.2f}%', f'{train_FPR * 100:.2f}%', f'{train_FNR * 100:.2f}%'],
-        'Testing Data': [f'{test_accuracy * 100:.2f}%', f'{test_FPR * 100:.2f}%', f'{test_FNR * 100:.2f}%']
+        'Training Data': [f'{train_metrics[0] * 100:.2f}%', f'{train_metrics[1] * 100:.2f}%', f'{train_metrics[2] * 100:.2f}%'],
+        'Testing Data': [f'{test_metrics[0] * 100:.2f}%', f'{test_metrics[1] * 100:.2f}%', f'{test_metrics[2] * 100:.2f}%']
     })
-    
+
     return metrics_df
 
 
 def accuracy_FNR_plt(model):
     '''
-    Plots the train and test accuracies, and False Negative Rates (FNRs)
-    for different cutoff values, with train and test data on the same graphs.
-    
-    :param model: Trained model
+    Plot train and test accuracies, and FNRs across cutoff thresholds.
+
+    :model: Trained model
 
     :return: None
     '''
-    # Setup lists
-    train_accuracies_list = []
-    train_FNRs_list = []
-    test_accuracies_list = []
-    test_FNRs_list = []
     cutoffs = np.arange(0.001, 0.50, 0.005)
+    train_accuracies, train_FNRs, test_accuracies, test_FNRs = [], [], [], []
 
-    # Calculate metrics for each cutoff and store in lists
-    for co in cutoffs:
-        train_accuracy, train_FPR, train_FNR = calculate_metrics(model, V_train, y_train, co)
-        test_accuracy, test_FPR, test_FNR = calculate_metrics(model, V_test, y_test, co)
+    for cutoff in cutoffs:
+        train_metrics = calculate_metrics(model, V_train, y_train, cutoff)
+        test_metrics = calculate_metrics(model, V_test, y_test, cutoff)
 
-        train_accuracies_list.append(train_accuracy)
-        train_FNRs_list.append(train_FNR)
-        test_accuracies_list.append(test_accuracy)
-        test_FNRs_list.append(test_FNR)
+        train_accuracies.append(train_metrics[0])
+        train_FNRs.append(train_metrics[2])
+        test_accuracies.append(test_metrics[0])
+        test_FNRs.append(test_metrics[2])
 
-    # Create a 1x2 grid for subplots
     fig, axs = plt.subplots(1, 2, figsize=(14, 6))
 
-    # Plot accuracy on the first subplot
-    axs[0].plot(cutoffs, train_accuracies_list, color='blue', label='Train Accuracy')
-    axs[0].plot(cutoffs, test_accuracies_list, color='green', label='Test Accuracy')
-    axs[0].axhline(y=0.90, color='gray', linestyle='--', linewidth=1)  # Add horizontal dashed line at y=0.90
-    axs[0].axvline(x=0.072, color='gray', linestyle='--', linewidth=1)  # Add vertical dashed line at x=0.072
+    # Accuracy plot
+    axs[0].plot(cutoffs, train_accuracies, color='blue', label='Train Accuracy')
+    axs[0].plot(cutoffs, test_accuracies, color='green', label='Test Accuracy')
+    axs[0].axhline(y=0.90, color='gray', linestyle='--')
+    axs[0].axvline(x=0.078, color='gray', linestyle='--')
     axs[0].set_title('Train and Test Accuracy vs Cutoff')
     axs[0].set_xlabel('Cutoff')
     axs[0].set_ylabel('Accuracy')
     axs[0].legend()
 
-    # Plot FNR on the second subplot
-    axs[1].plot(cutoffs, train_FNRs_list, color='red', label='Train FNR')
-    axs[1].plot(cutoffs, test_FNRs_list, color='purple', label='Test FNR')
+    # FNR plot
+    axs[1].plot(cutoffs, train_FNRs, color='red', label='Train FNR')
+    axs[1].plot(cutoffs, test_FNRs, color='purple', label='Test FNR')
     axs[1].set_title('Train and Test FNR vs Cutoff')
     axs[1].set_xlabel('Cutoff')
     axs[1].set_ylabel('FNR')
     axs[1].legend()
 
-    plt.tight_layout()  # Adjusts subplot layout for better spacing
+    plt.tight_layout()
     plt.show()
+
+
+def calculate_aic(model):
+    '''
+    Calculate the Akaike Information Criterion (AIC) for a logistic regression model.
+
+    :model: Trained logistic regression model
+
+    :return: AIC value
+    '''
+    # Step 1: Predicted probabilities for the positive class
+    proba = model.predict_proba(V_train)[:, 1]
+
+    # Step 2: Log-likelihood calculation
+    epsilon = 1e-10  # To avoid log(0)
+    log_likelihood = np.sum(y_train * np.log(proba + epsilon) + (1 - y_train) * np.log(1 - proba + epsilon))
+
+    # Step 3: Number of parameters
+    k = V_train.shape[1] + 1  # Number of features + intercept
+
+    # Step 4: AIC formula
+    aic_train = 2 * k - 2 * log_likelihood
+
+    # Step 1: Predicted probabilities for the positive class
+    proba = model.predict_proba(V_test)[:, 1]
+
+    # Step 2: Log-likelihood calculation
+    epsilon = 1e-10  # To avoid log(0)
+    log_likelihood = np.sum(y_test * np.log(proba + epsilon) + (1 - y_test) * np.log(1 - proba + epsilon))
+
+    # Step 3: Number of parameters
+    k = V_test.shape[1] + 1  # Number of features + intercept
+
+    # Step 4: AIC formula
+    aic_test = 2 * k - 2 * log_likelihood
+
+    return aic_train, aic_test
