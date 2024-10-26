@@ -302,7 +302,8 @@ def fraud_model(V, y):
     logistic = SGDClassifier(
         loss = 'log_loss', 
         max_iter = 10000,
-        learning_rate = 'optimal'
+        learning_rate = 'optimal',
+        random_state = 333
     )
 
     # Create training testing split for features and target data
@@ -325,7 +326,7 @@ def calculate_metrics(model, V, y, cutoff):
     :return accuracy, FPR, FNR: accuracy, false positive rate, and false negative rate of model given data set
     '''
     proba = model.predict_proba(V)[:, 1]  # Probabilities for the positive class (1)
-    predictions = (proba >= cutoff).astype(int).astype(bool)
+    predictions = (proba >= cutoff)
         
     # Accuracy
     accuracy = np.mean(predictions == y)
