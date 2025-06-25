@@ -4,6 +4,7 @@ I worked on this project with my classmate, KONNOR PAYNE.
 Our project consisted of finding a dataset where we could demonstrate what we had learned from the class.
 We found the "credit card fraud" dataset on Kaggle.com from the author NIDULA ELGIRIYEWITHANA.
 https://www.kaggle.com/datasets/nelgiriyewithana/credit-card-fraud-detection-dataset-2023
+(Note: The original dataset is too large to upload to GitHub. We recommend downloading from the original website to rerun code)
 
 We uploaded the dataset, analyzed the multiple parameters, 
 and created linear regression models to predict credit card fraud with varying degrees of accuracy and negativity bias.
